@@ -1,4 +1,4 @@
-# Second Thought: design
+# Need or Want: design
 
 An open-source MCP server that checks a purchase before you make it. It asks fixed multiple-choice questions, computes a verdict (BUY, WAIT or SKIP) with plain arithmetic, and logs every decision and its outcome so you can test later whether it was right. You can argue with it. Arguing changes the verdict only when you change a fact.
 
@@ -48,7 +48,7 @@ flowchart TD
     C -->|check_purchase / challenge_verdict /<br/>record_outcome / get_status| S[MCP server<br/>src/server.ts]
     S --> E[Engine: pure functions<br/>src/engine/*]
     S --> ST[Store: the only file I/O<br/>src/store.ts]
-    ST --> F[(~/.second-thought/<br/>config.json · state.json<br/>decisions.jsonl · prices.jsonl)]
+    ST --> F[(~/.need-or-want/<br/>config.json · state.json<br/>decisions.jsonl · prices.jsonl)]
     E --> V[Verdict + numbers + reasons]
     V --> C --> U
 ```
@@ -77,7 +77,7 @@ Runtime dependencies: `@modelcontextprotocol/sdk` and `zod`. Nothing else. Node 
 
 ## 4. Data
 
-Data folder: `~/.second-thought/` (override with `SECOND_THOUGHT_HOME`). Users who want a backup can point it at a synced folder.
+Data folder: `~/.need-or-want/` (override with `NEED_OR_WANT_HOME`). Users who want a backup can point it at a synced folder.
 
 | File | Contents | Write rule |
 |---|---|---|
@@ -581,7 +581,7 @@ All on `node:test`. No test framework dependency.
 
 | Step | Contents | Check before moving on |
 |---|---|---|
-| 0 | Private GitHub repo `second-thought-mcp`, MIT, `main` only. First commit: README stub, LICENSE, this design as `docs/DESIGN.md` | Repo exists, private |
+| 0 | Private GitHub repo `need-or-want-mcp`, MIT, `main` only. First commit: README stub, LICENSE, this design as `docs/DESIGN.md` | Repo exists, private |
 | 1 | PR 1, engine: questions, score, wait, challenge, explain, stats + tests | All formula, golden, monotonic and determinism tests pass |
 | 2 | PR 2, store and config: data folder, atomic writes, delayed loosening + tests | Store tests pass; replay works from files |
 | 3 | PR 3, MCP server: tools, prompts, instructions + smoke test | Smoke test passes; manual run in Claude Code |
