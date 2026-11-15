@@ -57,7 +57,7 @@ export const ARGUMENT_REPLIES: Record<string, string> = {
   future_use:
     "How often you'll use it is an estimate. Change it with the U1 field: after a verdict a revised estimate counts at 50%, and only once.",
   other:
-    "Which fact changed? Price, add-on cost, what's prompting it, what you own, what happens if you wait, a real deadline, money spent this month, or how you'll pay.",
+    "Which fact changed? Price, category, add-on cost, what's prompting it, what you own, what happens if you wait, a real deadline, money spent this month, or how you'll pay.",
 };
 
 export const STATUS_REPLIES = {
@@ -114,6 +114,13 @@ function componentLines(d: Decision, cfg: Config): string[] {
     .map((l) => l[2]);
 }
 
+function waitReason(d: Decision): string {
+  if (d.vetoes.includes("over_budget")) return "it costs more than what's left, so it waits for next month's budget.";
+  if (d.vetoes.includes("oneoff_cap")) return "your yearly one-off cap resets then.";
+  if (d.marginal) return "the score is marginal (50 to 69), so the wait is twice the normal cooling-off for this price.";
+  return "the normal cooling-off for this price.";
+}
+
 function describe(ch: Change): string {
   return Object.entries(ch.changes)
     .map(([id, key]) => `${QUESTIONS[id as FactId].text} → "${option(id as FactId, key)?.label}"`)
@@ -139,6 +146,14 @@ export function render(d: Decision, cfg: Config, wwc: WhatWouldChange): string {
   );
   lines.push(figures.join(" · "));
   for (const v of d.vetoes) lines.push(VETO_TEXT[v]);
+  if (d.verdict === "WAIT") lines.push(`Why this date: ${waitReason(d)}`);
+  if (n.oneOffs90) {
+    lines.push(
+      n.oneOffs90.count === 0
+        ? "This is your first one-time purchase in 90 days."
+        : `One-time purchases in the last 90 days: ${n.oneOffs90.count} (${money(n.oneOffs90.total, cur)}). They count as a group, not as exceptions.`,
+    );
+  }
   lines.push(...componentLines(d, cfg));
   if (wwc.nextBand) lines.push(`What would change this: ${describe(wwc.nextBand)} (score ${wwc.nextBand.score}).`);
   if (wwc.toBuy) lines.push(`To reach BUY: ${describe(wwc.toBuy)} (score ${wwc.toBuy.score}).`);

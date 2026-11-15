@@ -30,6 +30,7 @@ test("worked example: headphones you don't need score 46 and SKIP", () => {
     yearlyCommitment: null,
     waitHours: 0,
     waitUntil: null,
+    oneOffs90: null,
   });
 });
 
@@ -145,7 +146,7 @@ test("the one-off cap waits until next year", () => {
 });
 
 test("a business purchase is out of scope", () => {
-  assert.equal(decide(args({ answers: { P1: "e" } })).verdict, "NOT_PERSONAL");
+  assert.equal(decide(args({ answers: { P1: "d" } })).verdict, "NOT_PERSONAL");
 });
 
 test("micro purchases ask two questions and an impulse want skips", () => {

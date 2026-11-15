@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { ARGUMENT_TYPES } from "../src/engine/challenge.js";
 import { ARGUMENT_REPLIES, render, whatWouldChange } from "../src/engine/explain.js";
 import { decide } from "../src/engine/score.js";
-import { args, cfg } from "./fixtures.js";
+import { args, cfg, emptyHistory } from "./fixtures.js";
 
 test("finds the smallest fact change to the next band and to BUY", () => {
   const a = args();
@@ -30,7 +30,21 @@ test("the message leads with the verdict and keeps the override open", () => {
 test("a WAIT names the re-check time", () => {
   const a = args({ answers: { N1: "a", N2: "b", N3: "b" } });
   const d = decide(a);
-  assert.ok(render(d, cfg, whatWouldChange(a, d.score)).includes("If you still want it on 2026-11-11 14:00, check again."));
+  const m = render(d, cfg, whatWouldChange(a, d.score));
+  assert.ok(m.includes("If you still want it on 2026-11-11 14:00, check again."));
+  assert.ok(m.includes("Why this date: the normal cooling-off for this price."));
+});
+
+test("a marginal wait explains why it is longer", () => {
+  const a = args({ answers: { N1: "c", N2: "a", N3: "b", S1: "c", S2: "b" } });
+  const d = decide(a);
+  assert.ok(render(d, cfg, whatWouldChange(a, d.score)).includes("twice the normal cooling-off"));
+});
+
+test("a one-off shows your one-off record", () => {
+  const a = args({ answers: { O1: true }, history: emptyHistory({ oneOffs90: { count: 3, total: 900 } }) });
+  const d = decide(a);
+  assert.ok(render(d, cfg, whatWouldChange(a, d.score)).includes("One-time purchases in the last 90 days: 3 (USD 900)."));
 });
 
 test("every argument type has a fixed reply", () => {
