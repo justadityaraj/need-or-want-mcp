@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { dealScore, decide, effectiveUses, historyScore, needScore, pendingQuestions, realism } from "../src/engine/score.js";
+import { HOUR } from "../src/engine/util.js";
 import { NOW, args, cfg, daysAgo, emptyHistory, headphones, hoursAgo } from "./fixtures.js";
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
@@ -78,7 +79,7 @@ test("a replacement waits 24 hours, then buys", () => {
   assert.equal(first.score, 75);
   assert.equal(first.verdict, "WAIT");
   assert.equal(first.numbers.waitHours, 24);
-  assert.equal(first.numbers.waitUntil, new Date(NOW.getTime() + 24 * 3600 * 1000).toISOString());
+  assert.equal(first.numbers.waitUntil, new Date(NOW.getTime() + 24 * HOUR).toISOString());
   const later = decide(args({ answers: { N1: "a", N2: "b", N3: "b" }, history: emptyHistory({ firstCheckTs: hoursAgo(25) }) }));
   assert.equal(later.verdict, "BUY");
 });
@@ -115,6 +116,8 @@ test("debt and card vetoes label the verdict without changing the score", () => 
   const policy = { ...cfg, vetoes: { ...cfg.vetoes, creditCard: { onlyMerchants: ["amazon.in"] } } };
   assert.deepEqual(decide(args({ cfg: policy, answers: { P1: "b" }, input: { merchant: "flipkart.com" } })).vetoes, ["card"]);
   assert.deepEqual(decide(args({ cfg: policy, answers: { P1: "b" }, input: { merchant: "amazon.in" } })).vetoes, []);
+  const mixedCase = { ...cfg, vetoes: { ...cfg.vetoes, creditCard: { onlyMerchants: ["Amazon.in"] } } };
+  assert.deepEqual(decide(args({ cfg: mixedCase, answers: { P1: "b" }, input: { merchant: "AMAZON.IN" } })).vetoes, []);
 });
 
 test("a blocked category skips", () => {

@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -9,18 +9,16 @@ import { args } from "./fixtures.js";
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));
 const ALLOWED = [/^\.\.?\//, /^node:(fs|path|os|crypto)$/, /^@modelcontextprotocol\/sdk\//, /^zod$/];
 
-function files(dir: string): string[] {
-  return readdirSync(dir).flatMap((f) => {
-    const p = join(dir, f);
-    if (statSync(p).isDirectory()) return files(p);
-    return p.endsWith(".ts") ? [p] : [];
-  });
-}
+const files = (dir: string): string[] =>
+  readdirSync(dir, { recursive: true, encoding: "utf8" })
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => join(dir, f));
 
 const imports = (file: string): string[] =>
   [...readFileSync(file, "utf8").matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map((m) => m[1]);
 
 test("source imports nothing that can reach the network", () => {
+  assert.ok(files(join(SRC, "engine")).length >= 8, "the scan found no engine files");
   for (const f of files(SRC)) {
     for (const m of imports(f)) assert.ok(ALLOWED.some((r) => r.test(m)), `${f} imports ${m}`);
     assert.ok(!/\bfetch\s*\(/.test(readFileSync(f, "utf8")), `${f} calls fetch`);
