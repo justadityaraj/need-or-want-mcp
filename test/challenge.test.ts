@@ -27,6 +27,7 @@ test("facts count in full", () => {
   assert.equal(applyChallenge(headphones, wantAnswers, "price", 250, []).input.price, 250);
   assert.equal(applyChallenge(headphones, wantAnswers, "spentThisMonth", 100, []).input.spentThisMonth, 100);
   assert.equal(applyChallenge(headphones, wantAnswers, "N1", "a", []).answers.N1, "a");
+  assert.equal(applyChallenge(headphones, wantAnswers, "category", "home", []).input.category, "home");
 });
 
 test("no field means no change", () => {
@@ -38,7 +39,8 @@ test("no field means no change", () => {
 test("values are validated against the question bank", () => {
   assert.equal(isValidValue("N1", "a"), true);
   assert.equal(isValidValue("N1", "z"), false);
-  assert.equal(isValidValue("P1", "e"), true);
+  assert.equal(isValidValue("P1", "d"), true);
+  assert.equal(isValidValue("P1", "e"), false);
   assert.equal(isValidValue("N4", "2026-12-01"), true);
   assert.equal(isValidValue("N4", "none"), true);
   assert.equal(isValidValue("N4", "soon"), false);
@@ -46,4 +48,6 @@ test("values are validated against the question bank", () => {
   assert.equal(isValidValue("U1", "ten"), false);
   assert.equal(isValidValue("U2", 0), false);
   assert.equal(isValidValue("spentThisMonth", 0), true);
+  assert.equal(isValidValue("category", "home"), true);
+  assert.equal(isValidValue("category", "gadgets"), false);
 });

@@ -19,14 +19,14 @@ import {
   type PurchaseInput,
   type ReviewEvent,
 } from "./engine/types.js";
-import { isoDate, monthKey } from "./engine/util.js";
+import { isoDate, localTime, monthKey } from "./engine/util.js";
 import { Store } from "./store.js";
 
 const ENGINE_VERSION = "0.1.0";
 
 const INSTRUCTIONS = `Need or Want checks purchases before they happen. Its verdicts come from fixed arithmetic, not from you.
 1. When the user wants to buy something, or compares or price-checks something with intent to buy, call check_purchase before helping them buy.
-2. Ask the questions it returns as multiple choice, word for word, with the given options. Then call check_purchase again with every answer.
+2. Ask the questions it returns as multiple choice, word for word. Show each option's full text as the choice, never bare letters. Pass the option's letter back in answers. Then call check_purchase again with every answer.
 3. Never give your own verdict. Relay the tool's message.
 4. If the user pushes back, ask which fact changed and call challenge_verdict with that field. If nothing changed, call it with field "none" and the closest argumentType, and relay the reply.
 5. When the user buys it or decides not to, call record_outcome. If a response shows reviewsDue above 0, offer to run the reviews.`;
@@ -74,7 +74,7 @@ const answersSchema = z.object({
   U3: z.number().nonnegative().optional(),
   S1: z.enum(["a", "b", "c", "d"]).optional(),
   S2: z.enum(["a", "b", "c", "d"]).optional(),
-  P1: z.enum(["a", "b", "c", "d", "e"]).optional(),
+  P1: z.enum(["a", "b", "c", "d"]).optional(),
   O1: z.boolean().optional(),
   SP: z.number().nonnegative().optional(),
   STILL_WANT: z.boolean().optional(),
@@ -150,7 +150,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
     {
       title: "Check a purchase",
       description:
-        "Call this BEFORE helping the user buy anything, or when they compare or price-check something with intent to buy. The first call returns multiple-choice questions: ask them word for word, then call again with every answer in `answers`. The verdict comes from fixed arithmetic: relay its message, never your own opinion. Pass merchant (domain) and productKey (ASIN or URL) when known. Pass spentThisMonth only if a budgeting tool gives it.",
+        "Call this BEFORE helping the user buy anything, or when they compare or price-check something with intent to buy. The first call returns multiple-choice questions: ask them word for word, then call again with every answer in `answers`. The verdict comes from fixed arithmetic: relay its message, never your own opinion. Pick the category that matches how long the thing lasts; if unsure, ask the user. Pass merchant (domain) and productKey (ASIN or URL) when known. Pass spentThisMonth only if a budgeting tool gives it.",
       inputSchema: {
         item: z.string().min(1),
         price: z.number().positive(),
@@ -178,7 +178,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
       if (missing.length) {
         return text({
           status: "questions",
-          instructions: "Ask each question as multiple choice, word for word, then call check_purchase again with every answer.",
+          instructions: "Ask each question as multiple choice, word for word. Show each option's full text as the choice, never bare letters, and pass the letter back in answers. Then call check_purchase again with every answer.",
           questions: missing.map((id) => QUESTIONS[id]),
           reviewsDue: dueCount(ctx),
           warnings: ctx.warnings,
@@ -217,7 +217,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
     {
       title: "Challenge a verdict",
       description:
-        "Use when the user pushes back on a verdict. Name the ONE input that changed (field) and its new value. If no fact changed, use field 'none' with the closest argumentType. The verdict only moves when a fact changes; estimates (U1, U2) revised after a verdict count at 50%, once.",
+        "Use when the user pushes back on a verdict. Name the ONE input that changed (field) and its new value; a wrong category is a fact too. If no fact changed, use field 'none' with the closest argumentType. The verdict only moves when a fact changes; estimates (U1, U2) revised after a verdict count at 50%, once.",
       inputSchema: {
         decisionId: z.string(),
         field: z.enum(CHALLENGE_FIELDS),
@@ -242,7 +242,10 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
         const history = summarize(ctx.events, ctx.prices, r.input.category, v.key, spentToday(ctx), ctx.now);
         const result = evaluate({ input: r.input, answers: r.answers, cfg: ctx.cfg, history, now: ctx.now });
         after = summary(result.decision);
-        message = result.message;
+        const longer = before.waitUntil !== null && after.waitUntil !== null && Date.parse(after.waitUntil) > Date.parse(before.waitUntil);
+        message = longer
+          ? `The wait moved from ${localTime(before.waitUntil as string)} to ${localTime(after.waitUntil as string)}. That isn't a penalty for the new fact: a different rule sets the date now, as "Why this date" explains.\n${result.message}`
+          : result.message;
       } else {
         message = r.status === "none" ? ARGUMENT_REPLIES[argumentType ?? "other"] : STATUS_REPLIES[r.status];
       }

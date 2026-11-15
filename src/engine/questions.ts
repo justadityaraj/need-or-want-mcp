@@ -67,15 +67,14 @@ export const QUESTIONS: Record<QuestionId, Question> = {
   P1: choice("P1", "How will you pay?", [
     ["Bank transfer, UPI, debit or cash, in full", 0],
     ["Credit card, paid in full on the next bill", 0],
-    ["EMI, pay-later or no-cost EMI", 0],
-    ["A new card or a new credit line", 0],
+    ["EMI, pay-later, no-cost EMI, or a new card or credit line", 0],
     ["My business pays and books it as a business expense", 0],
   ]),
   O1: { id: "O1", kind: "boolean", text: "Is this a one-time expense?" },
   SP: {
     id: "SP",
     kind: "number",
-    text: "Roughly how much have you spent this month that these checks don't know about?",
+    text: "How much else have you spent this month from the same budget, outside these checks? A rough total is fine, or 0.",
   },
   STILL_WANT: { id: "STILL_WANT", kind: "boolean", text: "The wait is over. Do you still want it?" },
 };

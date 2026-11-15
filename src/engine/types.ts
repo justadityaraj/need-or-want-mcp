@@ -27,7 +27,7 @@ export interface Answers {
   U3?: number;
   S1?: Choice4;
   S2?: Choice4;
-  P1?: "a" | "b" | "c" | "d" | "e";
+  P1?: "a" | "b" | "c" | "d";
   O1?: boolean;
   SP?: number;
   STILL_WANT?: boolean;
@@ -94,6 +94,7 @@ export interface History {
   usage: { actual: number; predicted: number; n: number };
   prices: PricePoint[];
   firstCheckTs: string | null;
+  lastWaitUntil: string | null;
 }
 
 export interface Components {
@@ -117,6 +118,7 @@ export interface Numbers {
   yearlyCommitment: number | null;
   waitHours: number;
   waitUntil: string | null;
+  oneOffs90: { count: number; total: number } | null;
 }
 
 export type Veto = "blocked" | "debt" | "card" | "over_budget" | "oneoff_cap";

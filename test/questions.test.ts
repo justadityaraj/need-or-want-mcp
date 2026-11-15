@@ -21,5 +21,5 @@ test("options carry fixed values", () => {
   assert.equal(optionValue("N2", "b"), 0.9);
   assert.equal(optionValue("S1", "d"), 2);
   assert.equal(optionValue("N1", "z"), undefined);
-  assert.equal(QUESTIONS.P1.options?.length, 5);
+  for (const q of Object.values(QUESTIONS)) assert.ok((q.options?.length ?? 0) <= 4, `${q.id} has more than 4 options`);
 });

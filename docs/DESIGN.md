@@ -159,13 +159,13 @@ The clock: local time 23:00–05:00 ×1.25.
 ### 5.4 Payment and one-off questions
 
 **P1. How will you pay?**
-a. Bank transfer, UPI, debit or cash, in full · b. Credit card, paid in full on the next bill · c. EMI, pay-later or "no-cost EMI" · d. A new card or new credit line · e. My business pays and books it as a business expense
+a. Bank transfer, UPI, debit or cash, in full · b. Credit card, paid in full on the next bill · c. EMI, pay-later, no-cost EMI, or a new card or credit line · d. My business pays and books it as a business expense
 
-Option e ends the check: "This isn't a personal purchase. Check it against the business budget." It is logged.
+Every question has at most 4 options, because Claude Code's multiple-choice prompt allows 4. Option d ends the check: "This isn't a personal purchase. Check it against the business budget." It is logged.
 
 **O1. Is this a one-time expense?** yes / no. Feeds the one-off record (§6.4).
 
-**SP. Roughly how much have you spent this month that these checks don't know about?** Asked only when Claude didn't pass `spentThisMonth` and it wasn't answered today. The answer is stored by date in `state.json`.
+**SP. How much else have you spent this month from the same budget, outside these checks? A rough total is fine, or 0.** Asked only when Claude didn't pass `spentThisMonth` and it wasn't answered today. The answer is stored by date in `state.json`.
 
 ### 5.5 Question tiers
 
@@ -342,7 +342,7 @@ Need carries the most weight because the question is "should you buy this at all
 | # | Veto | Effect | Emergency bypass? |
 |---|---|---|---|
 | 1 | Blocked category (config: `{category, until}`) | SKIP until the date | yes |
-| 2 | Debt: P1 = c (EMI/pay-later) or d (new credit), if enabled (default on) | That payment method is never allowed. The verdict is computed as if paid in full, and labelled "only if paid in full" | no |
+| 2 | Debt: P1 = c (EMI, pay-later or new credit), if enabled (default on) | That payment method is never allowed. The verdict is computed as if paid in full, and labelled "only if paid in full" | no |
 | 3 | Credit card policy: `allow`, `block` or `{onlyMerchants: [...]}` | Same as #2 for card use the policy doesn't allow | no |
 | 4 | Over budget: `cost > R` | Can't be BUY this month → WAIT until next month (if S ≥ 50), otherwise SKIP | yes |
 | 5 | One-off cap (only if `oneOffs.mode = "cap"`; the default mode `count` treats one-offs like any other spending against the monthly budget) | Cap used up → WAIT until it resets, or SKIP | yes |
@@ -407,7 +407,7 @@ Flexible budget $2,000 a month, 30-day month, day 10, spent $900 → R = $1,100,
 
 | Field type | Fields | Rule |
 |---|---|---|
-| **Facts** | price, add-on cost, N1, N2, N3, N4 date, spent this month, payment method | Count in full. Logged with your one-line note. If the verdict flips, the status page marks it "changed after verdict" |
+| **Facts** | price, category, add-on cost, N1, N2, N3, N4 date, spent this month, payment method | Count in full. Logged with your one-line note. If the verdict flips, the status page marks it "changed after verdict" |
 | **Estimates** | U1 uses a month, U2 months | After a verdict: each can be revised **once**, and the revision counts at **50%**: `effective = original + 0.5·(new − original)` |
 | **Nothing** | field = `none` | The verdict stands. The argument is logged |
 
@@ -456,7 +456,7 @@ This is the soft layer. The hard layer is §7: even if Claude ignores the instru
 ### 8.2 Every verdict message, in this order
 
 1. Verdict and need label in one line ("WAIT 7 days: this is a WANT").
-2. The numbers: budget-days, cost per use, opportunity cost (10 and 20 years), monthly equivalent, wait end date and time.
+2. The numbers: budget-days, cost per use, opportunity cost (10 and 20 years), monthly equivalent, wait end date and time, and for a WAIT, which rule set that date (over budget, one-off cap, marginal score, or the normal cooling-off). If a challenge makes the wait longer, the reply says a different rule now sets the date, so a better fact never reads as a penalty.
 3. The top two reasons (largest score contributions or vetoes).
 4. What would change this (§7.4).
 5. "If you still want it on {date}, check again" (if-then plans increase follow-through, Gollwitzer 1999).

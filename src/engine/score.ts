@@ -145,7 +145,8 @@ export function pendingQuestions(input: PurchaseInput, a: Answers, cfg: Config, 
   const share = costNow(input, a) / monthBudget(cfg, now);
   const ids = questionsFor(tierFor(share)).filter((id) => a[id] === undefined);
   if (input.spentThisMonth === undefined && h.spentElsewhere === null && a.SP === undefined) ids.push("SP");
-  if (h.firstCheckTs !== null && a.STILL_WANT === undefined) ids.push("STILL_WANT");
+  const waitOver = h.lastWaitUntil !== null && now.getTime() >= Date.parse(h.lastWaitUntil);
+  if (waitOver && a.STILL_WANT === undefined) ids.push("STILL_WANT");
   return ids;
 }
 
@@ -201,6 +202,7 @@ export function decide({ input, answers: a, cfg, history: h, now }: DecideArgs):
       yearlyCommitment: perMonth === null ? null : round2(perMonth * 12),
       waitHours: wait,
       waitUntil: until ? until.toISOString() : null,
+      oneOffs90: a.O1 ? h.oneOffs90 : null,
     },
   });
   const waitOrSkip = (veto: Veto, until: Date): Decision => {
@@ -208,8 +210,8 @@ export function decide({ input, answers: a, cfg, history: h, now }: DecideArgs):
     return score >= cfg.thresholds.wait ? finish("WAIT", hoursBetween(now, until), until) : finish("SKIP", 0, null);
   };
 
-  if (a.P1 === "e") return finish("NOT_PERSONAL", 0, null);
-  if (cfg.vetoes.debt && (a.P1 === "c" || a.P1 === "d")) vetoes.push("debt");
+  if (a.P1 === "d") return finish("NOT_PERSONAL", 0, null);
+  if (cfg.vetoes.debt && a.P1 === "c") vetoes.push("debt");
   if (a.P1 === "b" && !cardAllowed(cfg.vetoes.creditCard, input.merchant)) vetoes.push("card");
   if (need.emergency) return finish("BUY", 0, null);
   if (cfg.vetoes.blockedCategories.some((b) => b.category === input.category && isoDate(now) <= b.until)) {
