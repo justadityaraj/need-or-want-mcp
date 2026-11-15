@@ -44,5 +44,6 @@ test("values are validated against the question bank", () => {
   assert.equal(isValidValue("N4", "soon"), false);
   assert.equal(isValidValue("price", -5), false);
   assert.equal(isValidValue("U1", "ten"), false);
+  assert.equal(isValidValue("U2", 0), false);
   assert.equal(isValidValue("spentThisMonth", 0), true);
 });

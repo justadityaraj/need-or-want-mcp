@@ -1,10 +1,10 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { summarize } from "../src/engine/history.js";
-import { accuracy, reviewsDue } from "../src/engine/stats.js";
+import { accuracy, openWaits, reviewsDue } from "../src/engine/stats.js";
 import type { LogEvent } from "../src/engine/types.js";
 import { DAY } from "../src/engine/util.js";
-import { NOW, headphones, outcomeEvent, reviewEvent, verdictEvent } from "./fixtures.js";
+import { NOW, outcomeEvent, reviewEvent, verdictEvent } from "./fixtures.js";
 
 const log: LogEvent[] = [
   verdictEvent("A", 40, { category: "electronics", O1: true, U1: 10, cost: 300 }),
@@ -16,13 +16,17 @@ const log: LogEvent[] = [
 ];
 
 test("summarize turns the log into a history", () => {
-  const h = summarize(log, [], headphones, "wireless headphones", null, NOW);
+  const h = summarize(log, [], "electronics", "wireless headphones", null, NOW);
   assert.equal(h.boughtThisMonth, 100);
   assert.deepEqual(h.oneOffs90, { count: 2, total: 400 });
   assert.equal(h.oneOffsThisYear, 400);
   assert.deepEqual(h.category, { regret: 1, n: 1 });
   assert.deepEqual(h.usage, { actual: 5, predicted: 10, n: 1 });
   assert.equal(h.firstCheckTs, log[5].type === "verdict" ? log[5].ts : null);
+});
+
+test("open waits list unbought WAIT verdicts", () => {
+  assert.deepEqual(openWaits(log, NOW), [{ decisionId: "C", item: "C", waitUntil: null, ready: false }]);
 });
 
 test("reviews come due at 30 and 90 days", () => {

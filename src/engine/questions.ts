@@ -97,6 +97,12 @@ export function questionsFor(tier: Tier): QuestionId[] {
   return [...TIERS[tier]];
 }
 
+export const NEED_IDS = ["N1", "N2", "N3"] as const;
+
+export function option(id: QuestionId, key: unknown): Option | undefined {
+  return QUESTIONS[id].options?.find((o) => o.key === key);
+}
+
 export function optionValue(id: QuestionId, key: unknown): number | undefined {
-  return QUESTIONS[id].options?.find((o) => o.key === key)?.value;
+  return option(id, key)?.value;
 }

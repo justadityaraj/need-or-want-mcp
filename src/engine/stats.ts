@@ -1,4 +1,4 @@
-import { WORTH, index, latestReview } from "./history.js";
+import { WORTH, index, latestReview, type Latest } from "./history.js";
 import type { LogEvent } from "./types.js";
 import { DAY, round2, round4 } from "./util.js";
 
@@ -40,6 +40,25 @@ export function reviewsDue(events: LogEvent[], now: Date): DueReview[] {
   return due;
 }
 
+export interface OpenWait {
+  decisionId: string;
+  item: string;
+  waitUntil: string | null;
+  ready: boolean;
+}
+
+export function openWaits(events: LogEvent[], now: Date): OpenWait[] {
+  const ix = index(events);
+  return [...ix.latest.entries()]
+    .filter(([id, l]) => l.decision.verdict === "WAIT" && !ix.outcomes.has(id))
+    .map(([id, l]) => ({
+      decisionId: id,
+      item: l.input.item,
+      waitUntil: l.decision.waitUntil,
+      ready: l.decision.waitUntil !== null && Date.parse(l.decision.waitUntil) <= now.getTime(),
+    }));
+}
+
 const mean = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 export function accuracy(events: LogEvent[]): Accuracy {
@@ -49,8 +68,7 @@ export function accuracy(events: LogEvent[]): Accuracy {
   let missN = 0;
   let notSpent = 0;
   for (const [id] of ix.verdicts) {
-    const latest = ix.latest.get(id);
-    if (!latest) continue;
+    const latest = ix.latest.get(id) as Latest;
     const o = ix.outcomes.get(id);
     const r = latestReview(ix.reviews.get(id));
     if (o?.bought && r?.worthIt) pairs.push({ p: latest.decision.score / 100, o: WORTH[r.worthIt], override: o.override });
