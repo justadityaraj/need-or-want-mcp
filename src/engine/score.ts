@@ -1,4 +1,4 @@
-import { optionValue, questionsFor, tierFor, type QuestionId } from "./questions.js";
+import { NEED_IDS, optionValue, questionsFor, tierFor, type QuestionId } from "./questions.js";
 import type {
   Answers,
   CardPolicy,
@@ -27,7 +27,7 @@ export interface DecideArgs {
   now: Date;
 }
 
-export interface CostPerUse {
+interface CostPerUse {
   score: number;
   cpu: number | null;
   uses: number | null;
@@ -37,7 +37,7 @@ export interface CostPerUse {
 export function needScore(a: Answers): { score: number; label: NeedLabel; emergency: boolean } {
   let total = 0;
   let weight = 0;
-  for (const id of ["N1", "N2", "N3"] as const) {
+  for (const id of NEED_IDS) {
     const v = optionValue(id, a[id]);
     if (v === undefined) continue;
     total += NEED_WEIGHTS[id] * v;
@@ -52,15 +52,15 @@ export function monthBudget(cfg: Config, now: Date): number {
   return cfg.budget.schedule[monthKey(now)] ?? cfg.budget.monthly;
 }
 
-export function spentSoFar(input: PurchaseInput, a: Answers, h: History): number {
+export function spentSoFar(input: Pick<PurchaseInput, "spentThisMonth">, a: Answers, h: History): number {
   return input.spentThisMonth ?? h.boughtThisMonth + (a.SP ?? h.spentElsewhere ?? 0);
 }
 
-export function costNow(input: PurchaseInput, a: Answers): number {
+function costNow(input: PurchaseInput, a: Answers): number {
   return input.price + (a.U3 ?? 0);
 }
 
-export function budgetFit(cost: number, remaining: number): number {
+function budgetFit(cost: number, remaining: number): number {
   if (remaining <= 0) return 0;
   return clamp(1 - cost / remaining) ** 2;
 }
@@ -75,19 +75,19 @@ export function effectiveUses(usesPerMonth: number, months: number, lambda: numb
   return (usesPerMonth * rho * (1 - Math.exp(-lambda * months))) / lambda;
 }
 
-export function cpuScore(costPerUse: number, daily: number): number {
+function cpuScore(costPerUse: number, daily: number): number {
   const q = costPerUse / daily;
   if (q <= 0) return 1;
   return clamp(Math.log10(1 / q) / Math.log10(20));
 }
 
-export function monthlyPrice(input: PurchaseInput): number | null {
+function monthlyPrice(input: PurchaseInput): number | null {
   if (input.recurring === "monthly") return input.price;
   if (input.recurring === "yearly") return input.price / 12;
   return null;
 }
 
-export function costPerUse(input: PurchaseInput, a: Answers, cfg: Config, h: History, daily: number): CostPerUse {
+function costPerUse(input: PurchaseInput, a: Answers, cfg: Config, h: History, daily: number): CostPerUse {
   const defaults = cfg.categories[input.category];
   if (defaults.lifespanMonths === null) return { score: 0.5, cpu: null, uses: null, months: null };
   const months = a.U2 ?? defaults.lifespanMonths;
@@ -119,7 +119,7 @@ export function dealScore(price: number, prices: PricePoint[], now: Date): numbe
   return clamp(0.5 + (m - price) / m / 0.4);
 }
 
-export function futureValue(input: PurchaseInput, a: Answers, r: number, years: number): number {
+function futureValue(input: PurchaseInput, a: Answers, r: number, years: number): number {
   const lump = (input.recurring === "none" ? input.price : 0) + (a.U3 ?? 0);
   const perMonth = monthlyPrice(input);
   const i = (1 + r) ** (1 / 12) - 1;
@@ -127,24 +127,15 @@ export function futureValue(input: PurchaseInput, a: Answers, r: number, years: 
   return round2(lump * (1 + r) ** years + annuity);
 }
 
-export function lateNight(now: Date): boolean {
-  const h = now.getHours();
-  return h >= 23 || h < 5;
-}
-
-export function baseWaitHours(share: number, cfg: Config): number {
+function waitHours(share: number, a: Answers, cfg: Config, now: Date): number {
   const band = cfg.waitBands.find((b) => b.upTo === null || share < b.upTo) ?? cfg.waitBands[cfg.waitBands.length - 1];
-  return band.hours;
+  if (a.N1 === "a") return Math.min(band.hours, 24);
+  const lateNight = now.getHours() >= 23 || now.getHours() < 5;
+  const m = Math.min(2, (optionValue("S1", a.S1) ?? 1) * (optionValue("S2", a.S2) ?? 1) * (lateNight ? 1.25 : 1));
+  return Math.ceil(band.hours * m);
 }
 
-export function waitHours(share: number, a: Answers, cfg: Config, now: Date): number {
-  const base = baseWaitHours(share, cfg);
-  if (a.N1 === "a") return Math.min(base, 24);
-  const m = Math.min(2, (optionValue("S1", a.S1) ?? 1) * (optionValue("S2", a.S2) ?? 1) * (lateNight(now) ? 1.25 : 1));
-  return Math.ceil(base * m);
-}
-
-export function capByDeadline(hours: number, a: Answers, now: Date): number {
+function capByDeadline(hours: number, a: Answers, now: Date): number {
   if (!a.N4 || a.N4 === "none") return hours;
   const left = (localDate(a.N4).getTime() - now.getTime()) / HOUR - 24;
   return Math.max(0, Math.min(hours, Math.floor(left)));
@@ -158,15 +149,15 @@ export function pendingQuestions(input: PurchaseInput, a: Answers, cfg: Config, 
   return ids;
 }
 
-export function scoreOf(c: Components, cfg: Config): number {
+function scoreOf(c: Components, cfg: Config): number {
   const w = cfg.weights;
   return Math.round(100 * (w.need * c.need + w.budget * c.budget + w.costPerUse * c.costPerUse + w.history * c.history + w.deal * c.deal));
 }
 
 function cardAllowed(policy: CardPolicy, merchant: string | undefined): boolean {
   if (policy === "allow") return true;
-  if (policy === "block") return false;
-  return merchant !== undefined && policy.onlyMerchants.includes(merchant.toLowerCase());
+  if (policy === "block" || merchant === undefined) return false;
+  return policy.onlyMerchants.some((m) => m.toLowerCase() === merchant.toLowerCase());
 }
 
 const hoursBetween = (from: Date, to: Date): number => Math.ceil((to.getTime() - from.getTime()) / HOUR);

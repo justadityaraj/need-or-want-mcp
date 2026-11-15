@@ -1,9 +1,9 @@
-import { QUESTIONS } from "./questions.js";
+import { NEED_IDS, QUESTIONS, option } from "./questions.js";
 import { decide, type DecideArgs } from "./score.js";
 import type { Answers, Config, Decision, Veto } from "./types.js";
 import { localTime, round2 } from "./util.js";
 
-type FactId = "N1" | "N2" | "N3";
+type FactId = (typeof NEED_IDS)[number];
 
 export interface Change {
   changes: Partial<Record<FactId, string>>;
@@ -18,7 +18,7 @@ export interface WhatWouldChange {
 const band = (score: number, cfg: Config): number => (score >= cfg.thresholds.buy ? 2 : score >= cfg.thresholds.wait ? 1 : 0);
 
 export function whatWouldChange(args: DecideArgs, current: number): WhatWouldChange {
-  const ids = (["N1", "N2", "N3"] as const).filter((id) => args.answers[id] !== undefined);
+  const ids = NEED_IDS.filter((id) => args.answers[id] !== undefined);
   const from = band(current, args.cfg);
   const best: WhatWouldChange = { nextBand: null, toBuy: null };
   const better = (n: number, s: number, c: Change | null): boolean =>
@@ -59,6 +59,11 @@ export const ARGUMENT_REPLIES: Record<string, string> = {
   other:
     "Which fact changed? Price, add-on cost, what's prompting it, what you own, what happens if you wait, a real deadline, money spent this month, or how you'll pay.",
 };
+
+export const STATUS_REPLIES = {
+  repeat: "You've already made this exact point. Repeating it changes nothing. The verdict stands.",
+  estimate_used: "This estimate was already revised once after the verdict. It can't be revised again. The verdict stands.",
+} as const;
 
 const VETO_TEXT: Record<Veto, string> = {
   blocked: "This category is blocked in your settings.",
@@ -103,7 +108,7 @@ function componentLines(d: Decision, cfg: Config): string[] {
     ],
   ];
   const weightOf = ([w, s]: [number, number, string]): number => (d.verdict === "BUY" ? w * s : w * (1 - s));
-  return [...lines]
+  return lines
     .sort((x, y) => weightOf(y) - weightOf(x))
     .slice(0, 2)
     .map((l) => l[2]);
@@ -111,10 +116,7 @@ function componentLines(d: Decision, cfg: Config): string[] {
 
 function describe(ch: Change): string {
   return Object.entries(ch.changes)
-    .map(([id, key]) => {
-      const q = QUESTIONS[id as FactId];
-      return `${q.text} → "${q.options?.find((o) => o.key === key)?.label}"`;
-    })
+    .map(([id, key]) => `${QUESTIONS[id as FactId].text} → "${option(id as FactId, key)?.label}"`)
     .join(" and ");
 }
 
@@ -143,4 +145,10 @@ export function render(d: Decision, cfg: Config, wwc: WhatWouldChange): string {
   if (d.verdict === "WAIT") lines.push(`If you still want it on ${until}, check again.`);
   if (d.verdict !== "BUY") lines.push("You can still buy it. It will be logged as an override.");
   return lines.join("\n");
+}
+
+export function evaluate(args: DecideArgs): { decision: Decision; whatWouldChange: WhatWouldChange; message: string } {
+  const decision = decide(args);
+  const wwc = whatWouldChange(args, decision.score);
+  return { decision, whatWouldChange: wwc, message: render(decision, args.cfg, wwc) };
 }

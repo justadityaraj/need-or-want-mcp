@@ -1,24 +1,9 @@
-import type {
-  Answers,
-  ChallengeEvent,
-  DecisionSummary,
-  History,
-  KeyedPrice,
-  LogEvent,
-  OutcomeEvent,
-  PurchaseInput,
-  ReviewEvent,
-  VerdictEvent,
-} from "./types.js";
+import type { Category, ChallengeEvent, History, KeyedPrice, LogEvent, OutcomeEvent, ReviewEvent, VerdictEvent } from "./types.js";
 import { DAY, monthKey } from "./util.js";
 
 export const WORTH = { yes: 1, meh: 0.5, no: 0 } as const;
 
-export interface Latest {
-  input: PurchaseInput;
-  answers: Answers;
-  decision: DecisionSummary;
-}
+export type Latest = VerdictEvent | ChallengeEvent;
 
 export interface Indexed {
   verdicts: Map<string, VerdictEvent>;
@@ -33,10 +18,10 @@ export function index(events: LogEvent[]): Indexed {
   for (const e of events) {
     if (e.type === "verdict") {
       ix.verdicts.set(e.id, e);
-      ix.latest.set(e.id, { input: e.input, answers: e.answers, decision: e.decision });
+      ix.latest.set(e.id, e);
     } else if (e.type === "challenge") {
       ix.challenges.set(e.id, [...(ix.challenges.get(e.id) ?? []), e]);
-      if (e.status === "applied") ix.latest.set(e.id, { input: e.input, answers: e.answers, decision: e.decision });
+      if (e.status === "applied") ix.latest.set(e.id, e);
     } else if (e.type === "outcome") {
       ix.outcomes.set(e.id, e);
     } else {
@@ -54,8 +39,8 @@ export function latestReview(rs: ReviewEvent[] | undefined): ReviewEvent | undef
 export function summarize(
   events: LogEvent[],
   prices: KeyedPrice[],
-  input: PurchaseInput,
-  key: string,
+  category: Category | null,
+  key: string | null,
   spentElsewhere: number | null,
   now: Date,
 ): History {
@@ -85,7 +70,7 @@ export function summarize(
       if (t.getFullYear() === now.getFullYear()) h.oneOffsThisYear += paid;
     }
     const r = latestReview(ix.reviews.get(id));
-    if (r?.worthIt && v.input.category === input.category) {
+    if (r?.worthIt && v.input.category === category) {
       h.category.regret += 1 - WORTH[r.worthIt];
       h.category.n++;
     }

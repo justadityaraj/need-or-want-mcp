@@ -1,9 +1,7 @@
-import { QUESTIONS } from "./questions.js";
+import { optionValue } from "./questions.js";
 import type { Answers, ChallengeStatus, PurchaseInput } from "./types.js";
 
-export const FACT_FIELDS = ["price", "U3", "N1", "N2", "N3", "N4", "spentThisMonth", "P1"] as const;
-export const ESTIMATE_FIELDS = ["U1", "U2"] as const;
-export const CHALLENGE_FIELDS = [...FACT_FIELDS, ...ESTIMATE_FIELDS, "none"] as const;
+export const CHALLENGE_FIELDS = ["price", "U3", "N1", "N2", "N3", "N4", "spentThisMonth", "P1", "U1", "U2", "none"] as const;
 export type ChallengeField = (typeof CHALLENGE_FIELDS)[number];
 export const ARGUMENT_TYPES = ["deserve", "scarcity", "sale", "one_time", "social", "mood", "sunk", "future_use", "other"] as const;
 
@@ -23,10 +21,8 @@ export interface ChallengeResult {
 export function isValidValue(field: ChallengeField, value: unknown): boolean {
   if (field === "none") return true;
   if (field === "N4") return value === "none" || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value));
-  if (field === "N1" || field === "N2" || field === "N3" || field === "P1") {
-    return (QUESTIONS[field].options ?? []).some((o) => o.key === value);
-  }
-  return typeof value === "number" && Number.isFinite(value) && (field === "price" ? value > 0 : value >= 0);
+  if (field === "N1" || field === "N2" || field === "N3" || field === "P1") return optionValue(field, value) !== undefined;
+  return typeof value === "number" && Number.isFinite(value) && (field === "price" || field === "U2" ? value > 0 : value >= 0);
 }
 
 export function applyChallenge(
