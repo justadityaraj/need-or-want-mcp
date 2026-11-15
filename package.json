@@ -1,0 +1,46 @@
+{
+  "name": "need-or-want-mcp",
+  "version": "0.1.0",
+  "mcpName": "io.github.justadityaraj/need-or-want-mcp",
+  "description": "Stop impulse buying: an MCP server that checks whether a purchase is a need or a want, with deterministic verdicts and local data",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "bin": {
+    "need-or-want-mcp": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/src/index.js",
+    "test": "tsc && node --test \"dist/test/*.test.js\"",
+    "start": "node dist/src/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "impulse-buying",
+    "need-vs-want",
+    "personal-finance",
+    "claude"
+  ],
+  "author": "Aditya Raj Singh <https://adityarajsingh.com/>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justadityaraj/need-or-want-mcp.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  }
+}
