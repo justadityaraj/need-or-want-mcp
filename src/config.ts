@@ -27,17 +27,16 @@ export function stableStringify(x: unknown): string {
 
 export const configHash = (c: Config): string => createHash("sha256").update(stableStringify(c)).digest("hex").slice(0, 16);
 
+export const scheduleSchema = z.record(z.string().regex(/^\d{4}-\d{2}$/), z.number().positive());
+
 const share = z.number().min(0);
 const schema = z.object({
   currency: z.string().min(1),
-  budget: z.object({
-    monthly: z.number().nonnegative(),
-    schedule: z.record(z.string().regex(/^\d{4}-\d{2}$/), z.number().nonnegative()),
-  }),
+  budget: z.object({ monthly: z.number().nonnegative(), schedule: scheduleSchema }),
   vetoes: z.object({
     debt: z.boolean(),
     creditCard: z.union([z.literal("allow"), z.literal("block"), z.object({ onlyMerchants: z.array(z.string()) })]),
-    blockedCategories: z.array(z.object({ category: z.enum(CATEGORIES), until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })),
+    blockedCategories: z.array(z.object({ category: z.enum(CATEGORIES), until: z.iso.date() })),
   }),
   oneOffs: z.object({ mode: z.enum(["count", "cap"]), yearlyCap: z.number().nonnegative() }),
   weights: z
@@ -50,11 +49,11 @@ const schema = z.object({
   realReturn: z.number().min(-0.5).max(0.5),
   hourlyIncome: z.number().positive().nullable(),
   loosenDelayDays: z.number().int().min(0),
-  categories: z.record(z.string(), z.object({ lifespanMonths: z.number().positive().nullable(), lambda: z.number().min(0) })),
+  categories: z.record(z.enum(CATEGORIES), z.object({ lifespanMonths: z.number().positive().nullable(), lambda: z.number().min(0) })),
 });
 
 export function loadConfig(raw: unknown): Config {
-  return schema.parse(deepMerge(DEFAULT_CONFIG, raw)) as Config;
+  return schema.parse(deepMerge(DEFAULT_CONFIG, raw));
 }
 
 const cardRank = (p: CardPolicy): number => (p === "block" ? 0 : p === "allow" ? 2 : 1);
@@ -97,6 +96,11 @@ export interface ConfigState {
   pending: { config: Config; since: string } | null;
 }
 
+export function loosensAt(st: ConfigState): string | null {
+  if (!st.pending || !st.applied) return null;
+  return new Date(Date.parse(st.pending.since) + st.applied.loosenDelayDays * DAY).toISOString();
+}
+
 // ponytail: a change that mixes tightening and loosening waits as a whole; split it per field if that ever annoys anyone
 export function resolveConfig(file: Config, st: ConfigState, now: Date): { inForce: Config; state: ConfigState } {
   const applyNow = { inForce: file, state: { applied: file, pending: null } };
@@ -104,6 +108,7 @@ export function resolveConfig(file: Config, st: ConfigState, now: Date): { inFor
   const same = (a: Config, b: Config) => stableStringify(a) === stableStringify(b);
   if (same(file, st.applied) || isTightening(st.applied, file)) return applyNow;
   const pending = st.pending && same(st.pending.config, file) ? st.pending : { config: file, since: now.toISOString() };
-  if (now.getTime() - Date.parse(pending.since) >= st.applied.loosenDelayDays * DAY) return applyNow;
-  return { inForce: st.applied, state: { applied: st.applied, pending } };
+  const state = { applied: st.applied, pending };
+  if (now.getTime() >= Date.parse(loosensAt(state) as string)) return applyNow;
+  return { inForce: st.applied, state };
 }

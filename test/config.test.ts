@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { configHash, deepMerge, isTightening, loadConfig, resolveConfig, stableStringify } from "../src/config.js";
+import { configHash, deepMerge, isTightening, loadConfig, loosensAt, resolveConfig, stableStringify } from "../src/config.js";
 import { DEFAULT_CONFIG } from "../src/engine/defaults.js";
 import { DAY } from "../src/engine/util.js";
 
@@ -20,8 +20,10 @@ test("a partial file merges over the defaults", () => {
   assert.equal(c.vetoes.debt, true);
 });
 
-test("weights must add up to 1", () => {
+test("invalid settings are rejected", () => {
   assert.throws(() => loadConfig({ weights: { need: 0.9 } }));
+  assert.throws(() => loadConfig({ vetoes: { blockedCategories: [{ category: "electronics", until: "2026-13-45" }] } }));
+  assert.throws(() => loadConfig({ budget: { schedule: { "2026-12": 0 } } }));
 });
 
 test("the hash ignores key order", () => {
@@ -51,6 +53,7 @@ test("loosening waits 7 days and restarts if the change changes", () => {
   r = resolveConfig(withBudget(2500), r.state, day0);
   assert.equal(r.inForce.budget.monthly, 2000);
   assert.equal(r.state.pending?.since, day0.toISOString());
+  assert.equal(loosensAt(r.state), plus(7).toISOString());
   assert.equal(resolveConfig(withBudget(2500), r.state, plus(6)).inForce.budget.monthly, 2000);
   const restarted = resolveConfig(withBudget(2600), r.state, plus(6));
   assert.equal(restarted.state.pending?.since, plus(6).toISOString());

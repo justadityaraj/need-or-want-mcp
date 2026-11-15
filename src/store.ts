@@ -2,12 +2,8 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeF
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export function defaultDir(): string {
-  return process.env.NEED_OR_WANT_HOME ?? join(homedir(), ".need-or-want");
-}
-
 export class Store {
-  constructor(readonly dir: string = defaultDir()) {
+  constructor(readonly dir: string = process.env.NEED_OR_WANT_HOME ?? join(homedir(), ".need-or-want")) {
     mkdirSync(dir, { recursive: true });
   }
 
