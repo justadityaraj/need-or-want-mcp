@@ -94,6 +94,7 @@ export interface History {
   usage: { actual: number; predicted: number; n: number };
   prices: PricePoint[];
   firstCheckTs: string | null;
+  lastWaitUntil: string | null;
 }
 
 export interface Components {

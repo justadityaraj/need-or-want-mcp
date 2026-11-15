@@ -54,9 +54,17 @@ export function summarize(
     usage: { actual: 0, predicted: 0, n: 0 },
     prices: prices.filter((p) => p.key === key).map(({ price, ts }) => ({ price, ts })),
     firstCheckTs: null,
+    lastWaitUntil: null,
   };
+  let lastCheck = "";
   for (const [id, v] of ix.verdicts) {
-    if (v.key === key && (h.firstCheckTs === null || Date.parse(v.ts) < Date.parse(h.firstCheckTs))) h.firstCheckTs = v.ts;
+    if (v.key === key) {
+      if (h.firstCheckTs === null || Date.parse(v.ts) < Date.parse(h.firstCheckTs)) h.firstCheckTs = v.ts;
+      if (v.ts >= lastCheck) {
+        lastCheck = v.ts;
+        h.lastWaitUntil = (ix.latest.get(id) as Latest).decision.waitUntil;
+      }
+    }
     const o = ix.outcomes.get(id);
     if (!o?.bought) continue;
     const paid = o.price ?? (ix.latest.get(id) as Latest).decision.cost;

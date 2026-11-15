@@ -25,6 +25,7 @@ export const emptyHistory = (over: Partial<History> = {}): History => ({
   usage: { actual: 0, predicted: 0, n: 0 },
   prices: [],
   firstCheckTs: null,
+  lastWaitUntil: null,
   ...over,
 });
 

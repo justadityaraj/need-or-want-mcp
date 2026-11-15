@@ -145,7 +145,8 @@ export function pendingQuestions(input: PurchaseInput, a: Answers, cfg: Config, 
   const share = costNow(input, a) / monthBudget(cfg, now);
   const ids = questionsFor(tierFor(share)).filter((id) => a[id] === undefined);
   if (input.spentThisMonth === undefined && h.spentElsewhere === null && a.SP === undefined) ids.push("SP");
-  if (h.firstCheckTs !== null && a.STILL_WANT === undefined) ids.push("STILL_WANT");
+  const waitOver = h.lastWaitUntil !== null && now.getTime() >= Date.parse(h.lastWaitUntil);
+  if (waitOver && a.STILL_WANT === undefined) ids.push("STILL_WANT");
   return ids;
 }
 

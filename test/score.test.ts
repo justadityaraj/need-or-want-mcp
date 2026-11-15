@@ -160,7 +160,16 @@ test("pending questions add SP and STILL_WANT when needed", () => {
   assert.equal(pendingQuestions(headphones, {}, cfg, emptyHistory(), NOW).length, 8);
   const noSpend = { ...headphones, spentThisMonth: undefined };
   assert.ok(pendingQuestions(noSpend, {}, cfg, emptyHistory(), NOW).includes("SP"));
-  assert.ok(pendingQuestions(headphones, {}, cfg, emptyHistory({ firstCheckTs: hoursAgo(5) }), NOW).includes("STILL_WANT"));
+  const waitOver = emptyHistory({ firstCheckTs: hoursAgo(50), lastWaitUntil: hoursAgo(1) });
+  assert.ok(pendingQuestions(headphones, {}, cfg, waitOver, NOW).includes("STILL_WANT"));
+});
+
+test("a re-check during the wait doesn't claim the wait is over", () => {
+  const midWait = emptyHistory({ firstCheckTs: hoursAgo(5), lastWaitUntil: new Date(NOW.getTime() + 100 * HOUR).toISOString() });
+  assert.ok(!pendingQuestions(headphones, {}, cfg, midWait, NOW).includes("STILL_WANT"));
+  assert.ok(!pendingQuestions(headphones, {}, cfg, emptyHistory({ firstCheckTs: hoursAgo(5) }), NOW).includes("STILL_WANT"));
+  const d = decide(args({ answers: { N1: "c", N2: "a", N3: "b", S1: "c", S2: "b" }, history: midWait }));
+  assert.equal(d.verdict, "WAIT");
 });
 
 test("a higher price never raises the score", () => {

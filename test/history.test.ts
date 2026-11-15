@@ -23,6 +23,15 @@ test("summarize turns the log into a history", () => {
   assert.deepEqual(h.category, { regret: 1, n: 1 });
   assert.deepEqual(h.usage, { actual: 5, predicted: 10, n: 1 });
   assert.equal(h.firstCheckTs, log[5].type === "verdict" ? log[5].ts : null);
+  assert.equal(h.lastWaitUntil, null);
+});
+
+test("the last wait comes from the most recent check of the same product", () => {
+  const until = new Date(NOW.getTime() + 5 * DAY).toISOString();
+  const first = verdictEvent("W1", 10, { key: "k", verdict: "WAIT" });
+  const second = verdictEvent("W2", 2, { key: "k", verdict: "WAIT" });
+  second.decision.waitUntil = until;
+  assert.equal(summarize([second, first], [], "other", "k", null, NOW).lastWaitUntil, until);
 });
 
 test("open waits list unbought WAIT verdicts", () => {
