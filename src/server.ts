@@ -1,20 +1,30 @@
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { configHash, deepMerge, loadConfig, resolveConfig, type ConfigState } from "./config.js";
+import { configHash, deepMerge, loadConfig, loosensAt, resolveConfig, scheduleSchema, stableStringify, type ConfigState } from "./config.js";
 import { ARGUMENT_TYPES, CHALLENGE_FIELDS, applyChallenge, isValidValue } from "./engine/challenge.js";
-import { ARGUMENT_REPLIES, render, whatWouldChange } from "./engine/explain.js";
+import { ARGUMENT_REPLIES, STATUS_REPLIES, evaluate } from "./engine/explain.js";
 import { index, summarize } from "./engine/history.js";
 import { QUESTIONS } from "./engine/questions.js";
-import { decide, monthBudget, pendingQuestions } from "./engine/score.js";
-import { accuracy, reviewsDue } from "./engine/stats.js";
-import { CATEGORIES, type Config, type Decision, type DecisionSummary, type KeyedPrice, type LogEvent, type PurchaseInput } from "./engine/types.js";
-import { DAY, isoDate, monthKey } from "./engine/util.js";
+import { monthBudget, pendingQuestions, spentSoFar } from "./engine/score.js";
+import { accuracy, openWaits, reviewsDue } from "./engine/stats.js";
+import {
+  CATEGORIES,
+  type Config,
+  type Decision,
+  type DecisionSummary,
+  type KeyedPrice,
+  type LogEvent,
+  type OutcomeEvent,
+  type PurchaseInput,
+  type ReviewEvent,
+} from "./engine/types.js";
+import { isoDate, monthKey } from "./engine/util.js";
 import { Store } from "./store.js";
 
-export const ENGINE_VERSION = "0.1.0";
+const ENGINE_VERSION = "0.1.0";
 
-export const INSTRUCTIONS = `Need or Want checks purchases before they happen. Its verdicts come from fixed arithmetic, not from you.
+const INSTRUCTIONS = `Need or Want checks purchases before they happen. Its verdicts come from fixed arithmetic, not from you.
 1. When the user wants to buy something, or compares or price-checks something with intent to buy, call check_purchase before helping them buy.
 2. Ask the questions it returns as multiple choice, word for word, with the given options. Then call check_purchase again with every answer.
 3. Never give your own verdict. Relay the tool's message.
@@ -32,7 +42,6 @@ interface Ctx {
   events: LogEvent[];
   prices: KeyedPrice[];
   warnings: string[];
-  reviewsDue: number;
 }
 
 interface Problem {
@@ -59,7 +68,7 @@ const answersSchema = z.object({
   N1: z.enum(["a", "b", "c", "d"]).optional(),
   N2: z.enum(["a", "b", "c", "d"]).optional(),
   N3: z.enum(["a", "b", "c"]).optional(),
-  N4: z.string().optional(),
+  N4: z.union([z.literal("none"), z.iso.date()]).optional(),
   U1: z.number().nonnegative().optional(),
   U2: z.number().positive().optional(),
   U3: z.number().nonnegative().optional(),
@@ -86,7 +95,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
     const saved = store.readJson<State>("state.json", { applied: null, pending: null, spentElsewhere: null });
     const { inForce, state } = resolveConfig(file, saved, now);
     const st: State = { ...saved, ...state };
-    store.writeJson("state.json", st);
+    if (stableStringify(st) !== stableStringify(saved)) store.writeJson("state.json", st);
     if (monthBudget(inForce, now) <= 0) return SETUP;
     const log = store.readLines<LogEvent>("decisions.jsonl");
     const prices = store.readLines<KeyedPrice>("prices.jsonl");
@@ -98,13 +107,12 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
       events: log.items,
       prices: prices.items,
       warnings: skipped ? [`${skipped} unreadable log line(s) were skipped. The files were not changed.`] : [],
-      reviewsDue: reviewsDue(log.items, now).length,
     };
   };
   const isCtx = (x: Ctx | Problem): x is Ctx => "cfg" in x;
   const spentToday = (ctx: Ctx): number | null =>
     ctx.st.spentElsewhere?.date === isoDate(ctx.now) ? ctx.st.spentElsewhere.amount : null;
-  const dueNow = (now: Date): number => reviewsDue(store.readLines<LogEvent>("decisions.jsonl").items, now).length;
+  const dueCount = (ctx: Ctx): number => reviewsDue(ctx.events, ctx.now).length;
 
   server.registerTool(
     "setup",
@@ -115,7 +123,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
       inputSchema: {
         currency: z.string().min(1).optional(),
         monthlyBudget: z.number().positive().optional(),
-        schedule: z.record(z.string().regex(/^\d{4}-\d{2}$/), z.number().positive()).optional(),
+        schedule: scheduleSchema.optional(),
         creditCard: z.enum(["allow", "block"]).optional(),
         onlyMerchants: z.array(z.string()).optional(),
         hourlyIncome: z.number().positive().optional(),
@@ -127,7 +135,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
       if (a.monthlyBudget || a.schedule) {
         patch.budget = { ...(a.monthlyBudget ? { monthly: a.monthlyBudget } : {}), ...(a.schedule ? { schedule: a.schedule } : {}) };
       }
-      if (a.onlyMerchants) patch.vetoes = { creditCard: { onlyMerchants: a.onlyMerchants.map((m) => m.toLowerCase()) } };
+      if (a.onlyMerchants) patch.vetoes = { creditCard: { onlyMerchants: a.onlyMerchants } };
       else if (a.creditCard) patch.vetoes = { creditCard: a.creditCard };
       if (a.hourlyIncome) patch.hourlyIncome = a.hourlyIncome;
       if (Object.keys(patch).length) store.writeJson("config.json", deepMerge(store.readJson("config.json", {}), patch));
@@ -157,29 +165,26 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
         answers: answersSchema.optional(),
       },
     },
-    async ({ answers = {}, ...rest }) => {
+    async ({ answers = {}, ...input }) => {
       const ctx = load();
       if (!isCtx(ctx)) return text(ctx);
-      const input: PurchaseInput = { ...rest, merchant: rest.merchant?.toLowerCase() };
       const key = keyFor(input);
       if (answers.SP !== undefined) {
         ctx.st.spentElsewhere = { date: isoDate(ctx.now), amount: answers.SP };
         store.writeJson("state.json", ctx.st);
       }
-      const history = summarize(ctx.events, ctx.prices, input, key, spentToday(ctx), ctx.now);
+      const history = summarize(ctx.events, ctx.prices, input.category, key, spentToday(ctx), ctx.now);
       const missing = pendingQuestions(input, answers, ctx.cfg, history, ctx.now);
       if (missing.length) {
         return text({
           status: "questions",
           instructions: "Ask each question as multiple choice, word for word, then call check_purchase again with every answer.",
           questions: missing.map((id) => QUESTIONS[id]),
-          reviewsDue: ctx.reviewsDue,
+          reviewsDue: dueCount(ctx),
           warnings: ctx.warnings,
         });
       }
-      const decideArgs = { input, answers, cfg: ctx.cfg, history, now: ctx.now };
-      const d = decide(decideArgs);
-      const wwc = whatWouldChange(decideArgs, d.score);
+      const { decision: d, whatWouldChange, message } = evaluate({ input, answers, cfg: ctx.cfg, history, now: ctx.now });
       const id = randomUUID();
       const ts = ctx.now.toISOString();
       store.append("prices.jsonl", { key, price: input.price, ts });
@@ -198,10 +203,10 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
         status: "verdict",
         decisionId: id,
         ...d,
-        whatWouldChange: wwc,
+        whatWouldChange,
         sellerClaimsIgnored: input.sellerClaims ?? [],
-        message: render(d, ctx.cfg, wwc),
-        reviewsDue: ctx.reviewsDue,
+        message,
+        reviewsDue: dueCount(ctx),
         warnings: ctx.warnings,
       });
     },
@@ -229,23 +234,17 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
       const latest = ix.latest.get(decisionId);
       if (!v || !latest) return text({ status: "error", message: `No decision with id ${decisionId}.` });
       if (!isValidValue(field, newValue)) return text({ status: "error", message: `${String(newValue)} is not a valid value for ${field}.` });
-      const priors = (ix.challenges.get(decisionId) ?? []).map((c) => ({ field: c.field, newValue: c.newValue, status: c.status }));
-      const r = applyChallenge(latest.input, latest.answers, field, newValue, priors);
+      const r = applyChallenge(latest.input, latest.answers, field, newValue, ix.challenges.get(decisionId) ?? []);
       const before = latest.decision;
       let after = before;
       let message: string;
       if (r.status === "applied") {
-        const history = summarize(ctx.events, ctx.prices, r.input, v.key, spentToday(ctx), ctx.now);
-        const decideArgs = { input: r.input, answers: r.answers, cfg: ctx.cfg, history, now: ctx.now };
-        const d = decide(decideArgs);
-        after = summary(d);
-        message = render(d, ctx.cfg, whatWouldChange(decideArgs, d.score));
-      } else if (r.status === "repeat") {
-        message = "You've already made this exact point. Repeating it changes nothing. The verdict stands.";
-      } else if (r.status === "estimate_used") {
-        message = "This estimate was already revised once after the verdict. It can't be revised again. The verdict stands.";
+        const history = summarize(ctx.events, ctx.prices, r.input.category, v.key, spentToday(ctx), ctx.now);
+        const result = evaluate({ input: r.input, answers: r.answers, cfg: ctx.cfg, history, now: ctx.now });
+        after = summary(result.decision);
+        message = result.message;
       } else {
-        message = ARGUMENT_REPLIES[argumentType ?? "other"];
+        message = r.status === "none" ? ARGUMENT_REPLIES[argumentType ?? "other"] : STATUS_REPLIES[r.status];
       }
       store.append("decisions.jsonl", {
         type: "challenge",
@@ -268,7 +267,7 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
         moved: before.verdict !== after.verdict || before.score !== after.score,
         effectiveValue: r.effectiveValue,
         message,
-        reviewsDue: ctx.reviewsDue,
+        reviewsDue: dueCount(ctx),
       });
     },
   );
@@ -295,19 +294,19 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
       const latest = index(ctx.events).latest.get(a.decisionId);
       if (!latest) return text({ status: "error", message: `No decision with id ${a.decisionId}.` });
       const ts = ctx.now.toISOString();
-      if (a.event === "review") {
-        if (!a.day) return text({ status: "error", message: "A review needs day: 30 or 90." });
-        store.append("decisions.jsonl", { type: "review", id: a.decisionId, ts, day: a.day, uses: a.uses, worthIt: a.worthIt, missIt: a.missIt });
-        return text({ status: "recorded", reviewsDue: dueNow(ctx.now) });
-      }
-      const bought = a.event === "bought";
-      const override = bought && latest.decision.verdict !== "BUY";
-      store.append("decisions.jsonl", { type: "outcome", id: a.decisionId, ts, bought, price: a.price ?? null, override });
+      if (a.event === "review" && !a.day) return text({ status: "error", message: "A review needs day: 30 or 90." });
+      const override = a.event === "bought" && latest.decision.verdict !== "BUY";
+      const event: ReviewEvent | OutcomeEvent =
+        a.event === "review"
+          ? { type: "review", id: a.decisionId, ts, day: a.day as 30 | 90, uses: a.uses, worthIt: a.worthIt, missIt: a.missIt }
+          : { type: "outcome", id: a.decisionId, ts, bought: a.event === "bought", price: a.price ?? null, override };
+      store.append("decisions.jsonl", event);
+      ctx.events.push(event);
       return text({
         status: "recorded",
         override,
         message: override ? "Logged as an override. It will be reviewed in 30 and 90 days like any other purchase." : "Logged.",
-        reviewsDue: dueNow(ctx.now),
+        reviewsDue: dueCount(ctx),
       });
     },
   );
@@ -321,34 +320,17 @@ export function createServer(store = new Store(), clock: () => Date = () => new 
     async () => {
       const ctx = load();
       if (!isCtx(ctx)) return text(ctx);
-      const ix = index(ctx.events);
       const budget = monthBudget(ctx.cfg, ctx.now);
-      const h = summarize(ctx.events, ctx.prices, { item: "", price: 0, category: "other", recurring: "none" }, "", spentToday(ctx), ctx.now);
-      const spent = h.boughtThisMonth + (h.spentElsewhere ?? 0);
-      const waits = [...ix.latest.entries()]
-        .filter(([id, l]) => l.decision.verdict === "WAIT" && !ix.outcomes.has(id))
-        .map(([id, l]) => ({
-          decisionId: id,
-          item: l.input.item,
-          waitUntil: l.decision.waitUntil,
-          ready: l.decision.waitUntil !== null && Date.parse(l.decision.waitUntil) <= ctx.now.getTime(),
-        }));
-      const pending = ctx.st.pending;
+      const spent = spentSoFar({}, {}, summarize(ctx.events, [], null, null, spentToday(ctx), ctx.now));
       return text({
         currency: ctx.cfg.currency,
         month: monthKey(ctx.now),
         budget,
         spent,
         remaining: budget - spent,
-        waits,
+        waits: openWaits(ctx.events, ctx.now),
         reviewsDue: reviewsDue(ctx.events, ctx.now),
-        pendingConfig:
-          pending && ctx.st.applied
-            ? {
-                since: pending.since,
-                appliesAt: new Date(Date.parse(pending.since) + ctx.st.applied.loosenDelayDays * DAY).toISOString(),
-              }
-            : null,
+        pendingConfig: ctx.st.pending ? { since: ctx.st.pending.since, appliesAt: loosensAt(ctx.st) } : null,
         accuracy: accuracy(ctx.events),
         warnings: ctx.warnings,
       });

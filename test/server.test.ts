@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DAY } from "../src/engine/util.js";
 import { createServer } from "../src/server.js";
 import { Store } from "../src/store.js";
-import { NOW } from "./fixtures.js";
+import { NOW, headphones, wantAnswers as answers } from "./fixtures.js";
 
 async function connect(clock: () => Date) {
   const server = createServer(new Store(mkdtempSync(join(tmpdir(), "need-or-want-"))), clock);
@@ -17,15 +17,12 @@ async function connect(clock: () => Date) {
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   return {
     client,
-    call: async (name: string, args: Record<string, unknown> = {}) => {
-      const r = await client.callTool({ name, arguments: args });
+    call: async (name: string, args: object = {}) => {
+      const r = await client.callTool({ name, arguments: { ...args } });
       return JSON.parse((r.content as { text: string }[])[0].text);
     },
   };
 }
-
-const headphones = { item: "Wireless headphones", price: 300, category: "electronics", spentThisMonth: 900 };
-const answers = { N1: "c", N2: "d", N3: "c", U1: 20, S1: "c", S2: "a", P1: "a", O1: false };
 
 test("the full flow: setup, questions, verdict, challenges, outcome, status", async () => {
   let now = NOW;
